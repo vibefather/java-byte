@@ -1,0 +1,32 @@
+import { getNextSample } from './bytebeat-engine.js'; // The glue code from TeaVM
+
+let audioContext;
+let scriptNode; // Using ScriptProcessorNode for simplicity, but AudioWorklet is better for low latency
+
+function startAudio() {
+    // 1. Create the Audio Context (The entry point to the DAC path)
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    
+    // 2. Create the Node that will generate the audio data (The Wasm-to-DAC bridge)
+    // Buffer size of 4096 is common; adjust for lower latency.
+    scriptNode = audioContext.createScriptProcessor(4096, 0, 1); 
+
+    scriptNode.onaudioprocess = function(event) {
+        // Get the output buffer array (float32 array)
+        const outputBuffer = event.outputBuffer.getChannelData(0); 
+
+        for (let i = 0; i < outputBuffer.length; i++) {
+            // 3. PULL SAMPLES FROM WASM COMPONENT
+            const sample = getNextSample(); 
+            
+            // Normalize byte sample (0-255) to Web Audio API float range (-1.0 to 1.0)
+            outputBuffer[i] = (sample / 128.0) - 1.0; 
+        }
+    };
+
+    // 4. Connect the generator node to the speakers (the destination)
+    scriptNode.connect(audioContext.destination); 
+    document.getElementById('status').textContent = 'Status: Streaming Bytebeat (DAC Benchmark Active)';
+}
+
+// NOTE: Browsers often start AudioContext in a 'suspended' state until user interaction.
